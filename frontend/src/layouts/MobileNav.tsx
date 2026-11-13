@@ -1,22 +1,27 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Layers, Activity, BookOpen } from 'lucide-react'
+import { LayoutDashboard, Users, Layers, BookOpen } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 export const MobileNav: React.FC = () => {
   const location = useLocation()
 
   const navItems = [
-    { label: 'Foundation', path: '/', icon: Layers },
+    { label: 'Dashboard', path: '/', external: false, icon: LayoutDashboard },
+    { label: 'Customers', path: '/customers', external: false, icon: Users },
+    { label: 'Architecture', path: '/foundation', external: false, icon: Layers },
     { label: 'API Docs', path: 'http://localhost:8000/docs', external: true, icon: BookOpen },
-    { label: 'Health', path: '#health-section', external: false, icon: Activity },
   ]
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 px-4 py-2 flex items-center justify-around shadow-lg pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {navItems.map((item) => {
         const Icon = item.icon
-        const isActive = location.pathname === item.path
+        const isActive =
+          !item.external &&
+          (item.path === '/'
+            ? location.pathname === '/'
+            : location.pathname.startsWith(item.path))
 
         if (item.external) {
           return (

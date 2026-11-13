@@ -21,7 +21,7 @@ class Customer(Base):
         default=lambda: str(uuid.uuid4()),
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    phone: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
     address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -36,11 +36,10 @@ class Customer(Base):
         nullable=False,
     )
 
-    # Relationships
+    # Relationships - RESTRICT delete to protect financial audit history
     transactions: Mapped[List["Transaction"]] = relationship(
         "Transaction",
         back_populates="customer",
-        cascade="all, delete-orphan",
         lazy="selectin",
     )
 

@@ -2,21 +2,28 @@ import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import App from '../app/App'
 
-describe('VoxLedger AI Frontend Shell', () => {
-  it('renders application brand and header elements', () => {
+describe('VoxLedger AI Frontend Phase 2 Shell', () => {
+  it('renders application brand and header navigation elements', () => {
     render(<App />)
     const brandElements = screen.getAllByText(/VoxLedger/i)
     expect(brandElements.length).toBeGreaterThan(0)
-    const phaseElements = screen.getAllByText(/PHASE 1/i)
+    const phaseElements = screen.getAllByText(/PHASE 2/i)
     expect(phaseElements.length).toBeGreaterThan(0)
   })
 
-  it('renders foundation hero banner and architecture cards', () => {
+  it('renders dashboard hero banner and ledger action elements', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { name: /VoxLedger AI/i })).toBeInTheDocument()
-    expect(screen.getByText(/PHASE 1 COMPLETE — FOUNDATION & ARCHITECTURE/i)).toBeInTheDocument()
-    expect(screen.getByText(/Backend System Health/i)).toBeInTheDocument()
-    expect(screen.getByText(/Database Model Scaffolding/i)).toBeInTheDocument()
-    expect(screen.getByText(/Phase 1 Verification Matrix/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Shopkeeper Ledger Dashboard/i })).toBeInTheDocument()
+    expect(screen.getByText(/DIGITAL KHATA • KIRANA LEDGER/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Add Customer/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /View All Customers/i })).toBeInTheDocument()
+  })
+
+  it('renders desktop and mobile navigation links', () => {
+    render(<App />)
+    const dashboardLinks = screen.getAllByRole('link', { name: /Dashboard/i })
+    expect(dashboardLinks.length).toBeGreaterThan(0)
+    const customerLinks = screen.getAllByRole('link', { name: /Customers/i })
+    expect(customerLinks.length).toBeGreaterThan(0)
   })
 })

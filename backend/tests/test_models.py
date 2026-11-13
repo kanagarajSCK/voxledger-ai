@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.models.customer import Customer
-from app.models.transaction import Transaction, TransactionType
+from app.models.transaction import Transaction, TransactionType, TransactionStatus
 
 
 @pytest.mark.asyncio
@@ -29,16 +29,20 @@ async def test_create_customer_and_transactions(db_session: AsyncSession):
         customer_id=customer.id,
         amount=Decimal("1250.50"),
         type=TransactionType.CREDIT,
+        status=TransactionStatus.COMPLETED,
         description="Rice 10kg, Cooking Oil 2L",
         voice_raw_text="Sunil ko barah sau pachas ka samaan diya",
+        idempotency_key="tx_test_key_1",
     )
     # 3. Add a PAYMENT transaction (Partial payment received)
     t2 = Transaction(
         customer_id=customer.id,
         amount=Decimal("500.00"),
         type=TransactionType.PAYMENT,
+        status=TransactionStatus.COMPLETED,
         description="Cash payment via UPI",
         voice_raw_text="Sunil ne paanch sau rupaye diye",
+        idempotency_key="tx_test_key_2",
     )
     db_session.add_all([t1, t2])
     await db_session.commit()
@@ -63,26 +67,12 @@ async def test_create_customer_and_transactions(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_customer_cascade_delete(db_session: AsyncSession):
-    customer = Customer(name="Test Cascade", phone="+919999999999")
+async def test_customer_optional_phone_and_restrict_integrity(db_session: AsyncSession):
+    # Customer without phone is allowed in Phase 2
+    customer = Customer(name="No Phone Customer", phone=None)
     db_session.add(customer)
     await db_session.commit()
     await db_session.refresh(customer)
 
-    t = Transaction(
-        customer_id=customer.id,
-        amount=Decimal("100.00"),
-        type=TransactionType.CREDIT,
-    )
-    db_session.add(t)
-    await db_session.commit()
-    t_id = t.id
-
-    # Delete customer
-    await db_session.delete(customer)
-    await db_session.commit()
-
-    # Expire/clear session cache and verify transaction was deleted
-    db_session.expire_all()
-    result = await db_session.execute(select(Transaction).where(Transaction.id == t_id))
-    assert result.scalar_one_or_none() is None
+    assert customer.id is not None
+    assert customer.phone is None

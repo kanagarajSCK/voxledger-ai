@@ -3,6 +3,7 @@ from typing import Any, Optional
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 
@@ -45,7 +46,7 @@ def create_error_response(
         "error": {
             "code": code,
             "message": message,
-            "details": details,
+            "details": jsonable_encoder(details),
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

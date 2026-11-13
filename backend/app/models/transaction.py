@@ -24,6 +24,11 @@ class TransactionType(str, enum.Enum):
     PAYMENT = "PAYMENT"  # Paisa Mila (Customer paid money / settled debt)
 
 
+class TransactionStatus(str, enum.Enum):
+    COMPLETED = "COMPLETED"
+    REVERSED = "REVERSED"
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
 
@@ -36,7 +41,7 @@ class Transaction(Base):
         default=lambda: str(uuid.uuid4()),
     )
     customer_id: Mapped[int] = mapped_column(
-        ForeignKey("customers.id", ondelete="CASCADE"),
+        ForeignKey("customers.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -49,12 +54,28 @@ class Transaction(Base):
         nullable=False,
         index=True,
     )
+    status: Mapped[TransactionStatus] = mapped_column(
+        SAEnum(TransactionStatus, name="transaction_status_enum"),
+        nullable=False,
+        default=TransactionStatus.COMPLETED,
+        index=True,
+    )
     description: Mapped[Optional[str]] = mapped_column(
         String(255),
         nullable=True,
     )
     voice_raw_text: Mapped[Optional[str]] = mapped_column(
         Text,
+        nullable=True,
+    )
+    idempotency_key: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=True,
+    )
+    reversal_reason: Mapped[Optional[str]] = mapped_column(
+        String(255),
         nullable=True,
     )
 
@@ -77,4 +98,4 @@ class Transaction(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<Transaction id={self.id} public_id={self.public_id} amount={self.amount} type={self.type}>"
+        return f"<Transaction id={self.id} public_id={self.public_id} amount={self.amount} type={self.type} status={self.status}>"

@@ -1,9 +1,18 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { StatusIndicator } from '../components/StatusIndicator'
-import { Mic, BookOpen, Layers } from 'lucide-react'
+import { Mic, BookOpen, Layers, Users, LayoutDashboard } from 'lucide-react'
+import { cn } from '../lib/utils'
 
 export const Header: React.FC = () => {
+  const location = useLocation()
+
+  const navLinks = [
+    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { label: 'Customers', path: '/customers', icon: Users },
+    { label: 'Architecture', path: '/foundation', icon: Layers },
+  ]
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -19,7 +28,7 @@ export const Header: React.FC = () => {
                   VoxLedger<span className="text-emerald-600">.ai</span>
                 </span>
                 <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                  PHASE 1
+                  PHASE 2
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
@@ -29,16 +38,38 @@ export const Header: React.FC = () => {
           </Link>
 
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-            <Link to="/" className="hover:text-emerald-600 transition-colors flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-emerald-600" />
-              Architecture
-            </Link>
+          <nav className="hidden md:flex items-center gap-1 sm:gap-2 text-sm font-medium">
+            {navLinks.map((link) => {
+              const Icon = link.icon
+              const isActive =
+                link.path === '/'
+                  ? location.pathname === '/'
+                  : location.pathname.startsWith(link.path)
+
+              return (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className={cn(
+                    'px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors',
+                    isActive
+                      ? 'bg-emerald-50 text-emerald-700 font-semibold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  )}
+                >
+                  <Icon className={cn('w-4 h-4', isActive ? 'text-emerald-600' : 'text-slate-400')} />
+                  {link.label}
+                </Link>
+              )
+            })}
+
+            <div className="h-4 w-px bg-slate-200 mx-2" />
+
             <a
               href="http://localhost:8000/docs"
               target="_blank"
               rel="noreferrer"
-              className="hover:text-emerald-600 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors flex items-center gap-1.5"
             >
               <BookOpen className="w-4 h-4 text-slate-400" />
               API Docs

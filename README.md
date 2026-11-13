@@ -10,81 +10,76 @@ VoxLedger AI is a hackathon-grade, multilingual AI voice accounting platform bui
 - **Framework**: Python 3.11+ / FastAPI 0.115+
 - **ASGI Server**: Uvicorn (standard)
 - **Data Validation & Settings**: Pydantic v2 & Pydantic-Settings
+- **Financial Precision**: Python `Decimal` and SQLAlchemy `Numeric(12, 2)` (zero floating-point arithmetic)
 - **ORM**: SQLAlchemy 2.0 (Async)
 - **Database Engine**: SQLite with `aiosqlite` async driver
-- **Migrations**: Alembic
+- **Migrations**: Alembic (`render_as_batch=True` for SQLite schema alterations)
 - **Real-Time Streaming**: Native WebSockets (`/api/v1/ws/voice`)
-- **Testing**: Pytest, Pytest-Asyncio, HTTPX, Starlette TestClient
+- **Testing**: Pytest, Pytest-Asyncio, HTTPX, Starlette TestClient (18 tests)
 
 ### Frontend
 - **Core**: React 18 + TypeScript + Vite
-- **Styling**: Tailwind CSS with custom kirana-friendly palette and touch-friendly mobile targets
+- **Styling**: Tailwind CSS with custom kirana-friendly palette (emerald, midnight navy, warm ivory) and touch-friendly mobile targets (min 44px)
 - **Icons**: Lucide React
-- **Routing**: React Router DOM (v6/v7)
-- **Server State**: TanStack Query (React Query v5)
-- **Testing**: Vitest, React Testing Library, JSDOM
+- **Routing**: React Router DOM
+- **Server State**: TanStack Query (React Query v5) with query invalidation
+- **Testing**: Vitest, React Testing Library, JSDOM (10 tests)
 
 ---
 
-## 2. Prerequisites
+## 2. Core Ledger Architecture & Financial Rules
 
-- **Operating System**: Windows 11 / macOS / Linux
-- **Python**: 3.11 or newer (Python 3.14 compatible)
-- **Node.js**: v18.0.0 or newer (v25 tested)
-- **Package Managers**: `pip` (Python) and `npm` (Node)
+VoxLedger AI enforces strict financial accounting rules:
+
+1. **Balance Formula**:
+   $$\text{Outstanding Balance} = \sum \text{CREDIT} - \sum \text{PAYMENT}$$
+2. **Fixed-Point Decimal Arithmetic**:
+   All monetary amounts are validated and stored using Python `Decimal` and database column `Numeric(12, 2)`. Floating-point math is strictly forbidden.
+3. **Transaction Validation**:
+   - `amount > 0.00`: Zero or negative transactions are rejected with HTTP 422.
+   - `PAYMENT <= outstanding_balance`: A payment cannot exceed what the customer currently owes; overpayments are rejected with structured HTTP 400 (`PAYMENT_EXCEEDS_BALANCE`).
+   - Customer existence is strictly verified before writing transactions.
+4. **Idempotency & Duplicate Prevention**:
+   Every transaction submission includes a unique `idempotency_key` (String 64). Re-submitting the same key atomically returns the original transaction record without duplicating money.
+5. **Customer Deletion Protection**:
+   Deleting a customer with existing transaction history is blocked by database foreign key constraint (`ondelete="RESTRICT"`) and verified at the service layer, returning HTTP 409 (`CUSTOMER_HAS_TRANSACTIONS`). Financial audit trails cannot be silently erased.
 
 ---
 
-## 3. Project Structure
+## 3. API Endpoints Reference
 
-```text
-voxledger-ai/
-├── frontend/                     # React + TypeScript Vite frontend
-│   ├── public/                   # Static public assets
-│   ├── src/
-│   │   ├── app/                  # App component, routing, providers
-│   │   ├── components/           # Reusable UI primitives (Buttons, Cards, Badges)
-│   │   ├── features/             # Feature modules (Dashboard, Health, Not Found)
-│   │   ├── hooks/                # Custom React hooks (useHealthCheck, useVoiceWebSocket)
-│   │   ├── layouts/              # Reusable layouts (RootLayout, Header, MobileNav)
-│   │   ├── lib/                  # Utilities and typed API client
-│   │   ├── services/             # Backend service integrations
-│   │   ├── styles/               # Global CSS & Tailwind configuration
-│   │   ├── types/                # TypeScript interfaces and API schemas
-│   │   ├── tests/                # Vitest & React Testing Library suites
-│   │   └── main.tsx              # DOM mount entrypoint
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-├── backend/                      # FastAPI async backend
-│   ├── alembic/                  # Database migration scripts
-│   ├── app/
-│   │   ├── api/                  # Versioned API routes (/api/v1)
-│   │   ├── core/                 # Settings, configuration, error handling
-│   │   ├── db/                   # Async session & SQLAlchemy base declarative
-│   │   ├── models/               # Scaffolding models (Customer, Transaction)
-│   │   ├── schemas/              # Pydantic validation schemas
-│   │   ├── services/             # Business logic layer
-│   │   ├── websocket/            # WebSocket connection manager & voice endpoint
-│   │   └── main.py               # FastAPI application entrypoint & lifespan
-│   ├── tests/                    # Pytest test suite
-│   ├── alembic.ini               # Alembic configuration
-│   └── requirements.txt          # Python dependencies
-├── docs/                         # Architectural diagrams and documentation
-├── .env.example                  # Environment configuration template
-├── .gitignore                    # Secrets, virtualenvs, and build artifacts
-├── README.md                     # Project documentation & startup guide
-└── PROJECT_STATUS.md             # Phase tracking & instructions for next agent
-```
+### Customer Management (`/api/v1/customers`)
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/customers?search=&skip=0&limit=50` | Search customers by name/phone with pagination |
+| `POST` | `/api/v1/customers` | Register customer (`name` required, `phone`, `address` optional) |
+| `GET` | `/api/v1/customers/{customer_id}` | Retrieve customer profile and live balance summary |
+| `PATCH` | `/api/v1/customers/{customer_id}` | Update customer name, phone, or address |
+| `DELETE` | `/api/v1/customers/{customer_id}` | Delete customer (blocked if transactions exist) |
+
+### Transaction Engine (`/api/v1/transactions`)
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/transactions` | Record `CREDIT` or `PAYMENT` with idempotency key |
+| `GET` | `/api/v1/transactions?skip=0&limit=50` | List transactions with customer metadata |
+| `GET` | `/api/v1/transactions/{transaction_id}` | Retrieve single transaction record |
+| `GET` | `/api/v1/customers/{customer_id}/transactions` | Customer ledger statement |
+
+### Dashboard Summary (`/api/v1/dashboard/summary`)
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/dashboard/summary` | Real-time aggregate statistics: total customers, total outstanding credit, today's credit, today's payments, and recent transactions |
+
+### System & Streaming
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Root health-check endpoint |
+| `GET` | `/api/v1/health` | Versioned v1 health-check endpoint |
+| `WS` | `/api/v1/ws/voice` | Real-time WebSocket connection for voice streaming |
 
 ---
 
 ## 4. Installation Instructions
-
-### Clone / Open Project
-```powershell
-cd D:\Projects\voxledger-ai
-```
 
 ### Backend Setup
 1. Create and activate a Python virtual environment:
@@ -120,7 +115,6 @@ Copy-Item .env.example .env
 ## 5. Startup Commands
 
 ### Start Backend Development Server
-From the root directory:
 ```powershell
 .\backend\venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
@@ -130,7 +124,6 @@ From the root directory:
 - **WebSocket Voice Endpoint**: `ws://localhost:8000/api/v1/ws/voice`
 
 ### Start Frontend Development Server
-In a separate terminal:
 ```powershell
 npm run dev --prefix frontend
 ```
@@ -144,16 +137,16 @@ npm run dev --prefix frontend
 ```powershell
 .\backend\venv\Scripts\python.exe -m pytest backend -v
 ```
-All 7 unit and integration tests run against an isolated SQLite test database.
+**Results**: 18 passed, 0 failed in 5.62s (100% PASSING).
 
 ### Run Frontend Tests (Vitest)
 ```powershell
-npm run test --prefix frontend
+npm test --prefix frontend
 ```
-Runs component and application shell integration tests via Vitest and JSDOM.
+**Results**: 4 test files, 10 passed, 0 failed in 25.47s (100% PASSING).
 
 ### Frontend Production Build Verification
 ```powershell
 npm run build --prefix frontend
 ```
-Verifies strict TypeScript type-checking and compiles optimized static assets.
+Compiles with zero TypeScript warnings or errors (`tsc -b && vite build`).
