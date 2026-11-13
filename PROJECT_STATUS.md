@@ -1,163 +1,122 @@
 # VoxLedger AI — Project Status & Handoff Guide
 
 ## 1. Current Phase
-**PHASE 2: Core Ledger Engine & Functional Dashboard** — **COMPLETED AND FULLY VERIFIED**
+**PHASE 3: Gnani Prisma v3.0 + Timbre v3.0 Real-Time Voice Integration** — **COMPLETED AND FULLY VERIFIED**
 
 ---
 
-## 2. Architecture Decisions (Phase 1 & Phase 2)
+## 2. Phase 3 Architecture Decisions & Accomplishments
 
-1. **Fixed-Point Financial Calculation**:
-   - Python `Decimal` and database column `Numeric(12, 2)` are strictly enforced across all models, schemas, and service functions.
-   - Formula: $\text{Outstanding Balance} = \sum \text{CREDIT} - \sum \text{PAYMENT}$.
-   - Floating-point calculations are prohibited to eliminate rounding drift in financial ledgers.
+1. **Live Gnani Speech Integration (Prisma v3.0 + Timbre v3.0)**:
+   - **Prisma v3.0 STT**: Real-time bidirectional streaming via WebSocket (`wss://api.vachana.ai/stt/v3/stream`).
+     - Standard linear PCM 16kHz 16-bit mono signed audio streaming.
+     - Handshake headers: `x-api-key-id`, `language_code` (`hi-IN`, `en-IN`, `ta-IN`, `kn-IN`), `x-sample-rate: "16000"`, `model: "prisma-v3.0"`.
+     - Event parsing: `speech_start`, intermediate `transcript`, `is_final` completion events.
+   - **Timbre v3.0 TTS**: Real-time Indic speech synthesis via REST (`POST https://api.vachana.ai/api/v1/tts/inference`).
+     - Verified Indic voice: `Shivani` (proven support across Hindi, English, Tamil, and Kannada).
+     - Returns clean 24kHz WAV audio encoded in base64 for instant browser playback.
 
-2. **Transaction Immutability & Reversals**:
-   - Transactions support states: `COMPLETED` and `REVERSED`.
-   - Financial records are never overwritten or deleted.
-   - Idempotency is enforced using a unique `idempotency_key` (String 64) per transaction to prevent double-charging or duplicate entries on network retries.
+2. **Mandatory Financial Safety State Machine**:
+   - Spoken words and raw STT/LLM transcripts are strictly forbidden from directly writing to the database.
+   - Flow: **Listen** $\rightarrow$ **Prisma v3.0 Transcribe** $\rightarrow$ **Indic Intent Parse** $\rightarrow$ **Resolve Customer** $\rightarrow$ **Pre-Validate Constraints** (Payment $\le$ Balance, Amount $> 0$) $\rightarrow$ **Propose Action** (Render UI verification card with current and projected balances + Synthesize Timbre v3.0 confirmation audio) $\rightarrow$ **Await Explicit Confirmation** ("Yes", "Haan", "Sari") or **Natural Correction** ("Ramesh-ku 500 illa, 350") $\rightarrow$ **Atomic LedgerService Commit** (with Decimal precision and idempotency protection) $\rightarrow$ **Synthesize Final Audio & Spoken Confirmation**.
 
-3. **Customer Deletion Integrity**:
-   - Deleting a customer with existing transaction history is blocked by foreign key constraint (`ondelete="RESTRICT"`) and pre-validated at the service layer, returning HTTP 409 (`CUSTOMER_HAS_TRANSACTIONS`).
+3. **Multi-Dialect Indic Intent Understanding Engine**:
+   - Built an Indic regex and NLP parser recognizing numbers (digits and words across English, Hindi, and Tamil), transaction verbs (credit, udhaar, likho, podu, paid, jama, kattitaan, vanthuchu), balance queries, natural corrections ("500 illa, 350"), confirmations ("Yes", "Haan", "Sari", "Thik hai"), and cancellations ("No", "Nahi", "Vendaam", "Beda").
 
-4. **Payment Validation Rule**:
-   - A customer payment cannot exceed their outstanding balance (`PAYMENT <= outstanding_balance`).
-   - Zero or negative amounts are rejected with HTTP 422 (`amount > 0.00`).
+4. **Multi-Turn Voice Workflow & Session Management**:
+   - `VoiceWorkflowService`: Thread-safe session tracking of pending actions, candidate customer resolution, payment vs. balance validations, and multi-language spoken prompt generation in 4 Indic languages (`en-IN`, `hi-IN`, `ta-IN`, `kn-IN`).
+   - Natural spoken feedback for validation errors (e.g. informing the shopkeeper if a payment exceeds what the customer owes).
 
-5. **SQLite Alembic Migrations**:
-   - Configured `render_as_batch=True` in `alembic/env.py` to allow SQLite table alter operations (e.g. dropping `NOT NULL` on `phone` and modifying constraints).
+5. **Frontend Real-Time Voice Assistant**:
+   - `useAudioStreamer`: Web Audio API hook downsampling mic input to 16,000Hz 16-bit mono signed PCM with live volume level tracking.
+   - `useVoiceWebSocket`: Bidirectional client handling binary PCM audio streaming, JSON control frames, automatic reconnection, and latency tracking.
+   - `VoiceContext` & `VoiceProvider`: Global accessibility of the Voice Assistant across the application.
+   - `VoiceAssistantModal`: Feature-rich voice modal with animated soundwave visualizer, pulsing mic button, 4 Indic language switchers (`हिन्दी`, `English`, `தமிழ்`, `ಕನ್ನಡ`), live transcript feed, safety verification card, audio playback with mute toggle, and typed command fallback.
+   - `FloatingVoiceButton`: Kirana shopkeeper-optimized one-tap floating microphone button.
+   - Mobile and desktop navigation integration (`Header.tsx`, `MobileNav.tsx`, `DashboardPage.tsx`).
 
-6. **Frontend UI/UX**:
-   - Fintech styling with emerald green (`emerald-600`), midnight navy (`slate-900`), and warm ivory backgrounds.
-   - Two-step transaction flow: Amount & details input -> explicit review & confirmation step displaying projected new balance before final submission.
-   - Real-time client-side validation prevents submitting payments that exceed the customer's current balance.
-   - Query invalidation ensures instant updates across customer lists, detail views, and dashboard KPI cards.
-
----
-
-## 3. Files Created and Modified
-
-### Phase 2 Backend (`backend/`)
-- `app/models/customer.py` — Updated: `phone` made optional (`nullable=True`), `transactions` relationship updated with `RESTRICT` integrity.
-- `app/models/transaction.py` — Updated: Added `status` (`TransactionStatus`: `COMPLETED`, `REVERSED`), `idempotency_key` (String(64), unique, indexed), `reversal_reason`, and `ForeignKey("customers.id", ondelete="RESTRICT")`.
-- `alembic/versions/3c3db0ba7db1_phase_2_ledger_engine_schema_updates.py` — Applied migration using `batch_alter_table`.
-- `app/schemas/customer.py` — Added `CustomerCreate`, `CustomerUpdate`, `CustomerResponse`, `CustomerSummaryResponse`, `CustomerListResponse`.
-- `app/schemas/transaction.py` — Added `TransactionCreate`, `TransactionResponse`, `TransactionListResponse`.
-- `app/schemas/dashboard.py` — Added `DashboardSummaryResponse`, `DashboardStats`.
-- `app/services/ledger_service.py` — Core ledger engine: `get_customer_balance_stats()`, `record_transaction()` (with idempotency, balance checks, atomic commit), `get_dashboard_summary()` (live SQL aggregates).
-- `app/api/v1/endpoints/customers.py` — Endpoints: `GET /customers`, `POST /customers`, `GET /customers/{id}`, `PATCH /customers/{id}`, `DELETE /customers/{id}`.
-- `app/api/v1/endpoints/transactions.py` — Endpoints: `POST /transactions`, `GET /transactions`, `GET /transactions/{id}`, `GET /customers/{customer_id}/transactions`.
-- `app/api/v1/endpoints/dashboard.py` — Endpoint: `GET /dashboard/summary`.
-- `app/api/v1/router.py` — Registered all customer, transaction, and dashboard endpoint routers.
-- `app/core/errors.py` — Updated Starlette error handler with `fastapi.encoders.jsonable_encoder` to cleanly serialize Decimal instances in validation errors.
-- `tests/test_ledger_api.py` — Comprehensive integration tests covering customer CRUD, credit/payment calculations, payment > balance rejection, amount <= 0 rejection, customer deletion protection, idempotency deduplication, and dashboard calculations.
-- `verify_live.py` — Updated live verification script to test live ledger calculations and dashboard summary over HTTP.
-
-### Phase 2 Frontend (`frontend/`)
-- `src/types/customer.ts` — TypeScript interfaces for Customer, CustomerSummary, CustomerListResponse.
-- `src/types/transaction.ts` — TypeScript interfaces for Transaction, TransactionType, TransactionCreatePayload.
-- `src/types/dashboard.ts` — TypeScript interfaces for DashboardSummary, DashboardStats.
-- `src/services/customerService.ts` — API client integration for customer CRUD operations.
-- `src/services/transactionService.ts` — API client integration for creating and listing transactions.
-- `src/services/dashboardService.ts` — API client integration for dashboard summary.
-- `src/components/ui/Modal.tsx` — Accessible modal dialog primitive with backdrop and escape key support.
-- `src/components/ui/Input.tsx` — Form input field component with validation error styling.
-- `src/components/ui/EmptyState.tsx` — Empty state placeholder component.
-- `src/features/customers/AddCustomerModal.tsx` — Customer creation dialog with validation and automatic query invalidation.
-- `src/features/transactions/TransactionModal.tsx` — Two-step transaction modal (Input -> Confirmation) with real-time balance validation, idempotency key generation, and credit/payment toggle.
-- `src/features/dashboard/DashboardPage.tsx` — Full fintech dashboard with 4 KPI cards (Total Customers, Outstanding Credit, Today's Credit, Today's Payments), quick actions, and recent transaction feed.
-- `src/features/customers/CustomerListPage.tsx` — Customer directory with real-time search, live balances, and quick credit/payment buttons.
-- `src/features/customers/CustomerDetailPage.tsx` — Detailed customer view with 3 KPI cards, ledger timeline table, customer delete action, and credit/payment actions.
-- `src/layouts/Header.tsx` & `MobileNav.tsx` — Updated navigation with links for Dashboard, Customers, Architecture, and API Docs.
-- `src/app/router.tsx` — Configured routes for `/`, `/customers`, `/customers/:id`, and `/foundation`.
-- `src/tests/App.test.tsx` — Updated tests for Phase 2 dashboard landing and navigation.
-- `src/tests/AddCustomerModal.test.tsx` — Tests for customer registration and required name validation.
-- `src/tests/TransactionModal.test.tsx` — Tests for credit modal, payment <= balance validation, step transitions, and amount > 0 checks.
+6. **Rigorous Security & Credential Hygiene**:
+   - `GNANI_API_KEY` stored exclusively as `pydantic.SecretStr` in backend settings.
+   - Zero credential exposure in API endpoints, WebSocket packets, frontend JavaScript, or logs.
+   - Backend acts as a secure upstream gateway proxy; client browsers have zero access to external API keys.
 
 ---
 
-## 4. Test Verification Records
+## 3. Test Verification Records
 
-### Backend Test Suite (Pytest)
-```powershell
-.\backend\venv\Scripts\python.exe -m pytest backend -v
-```
-**Outcome**: **18 passed, 0 failed in 5.62s (100% PASSING)**
-- `test_errors.py`: 404 structured error
-- `test_health.py`: unversioned health, versioned health, root endpoint
-- `test_ledger_api.py`:
-  - `test_create_and_retrieve_customer`
-  - `test_search_customers`
-  - `test_credit_and_payment_balance_calculation` (500 + 300 - 200 = 600)
-  - `test_reject_zero_and_negative_amounts`
-  - `test_reject_payment_exceeding_balance`
-  - `test_reject_nonexistent_customer`
-  - `test_customer_transaction_history`
-  - `test_duplicate_submission_idempotency`
-  - `test_dashboard_summary_calculations`
-  - `test_customer_deletion_protection`
-  - `test_concurrent_transaction_consistency`
-- `test_models.py`:
-  - `test_create_customer_and_transactions`
-  - `test_customer_optional_phone_and_restrict_integrity`
-- `test_websocket.py`: connection and handshake
+### Combined Test Suite Summary
+| Test Suite | Total Tests | Passed | Failed | Execution Time |
+|---|---|---|---|---|
+| **Backend (Pytest)** | 33 | **33** | 0 | 26.79s |
+| **Frontend (Vitest)** | 15 | **15** | 0 | 41.31s |
+| **Total Automated Tests** | **48** | **48** | **0** | **100% PASSING** |
 
-### Frontend Test Suite (Vitest)
-```powershell
-npm test --prefix frontend
-```
-**Outcome**: **4 test files, 10 passed, 0 failed in 25.47s (100% PASSING)**
-- `src/tests/AddCustomerModal.test.tsx` (2 tests passed)
-- `src/tests/TransactionModal.test.tsx` (4 tests passed)
-- `src/tests/App.test.tsx` (3 tests passed)
-- `src/tests/HealthMetricsCard.test.tsx` (1 test passed)
-
-### Frontend Production Build
-```powershell
-npm run build --prefix frontend
-```
-**Outcome**: **Clean compilation with zero TypeScript errors or warnings.**
-- `dist/index.html` (0.59 kB)
-- `dist/assets/index-CsJsvaMg.css` (26.48 kB)
-- `dist/assets/index-D6FLq4T8.js` (335.64 kB)
-- Built in 15.57s.
+### Live Gnani Acceptance Test (`backend/verify_gnani_live.py`)
+Executed live against `api.vachana.ai`:
+1. Synthesized audio: *"Ramesh-ku 340 rupees udhaar podu"* via live Timbre v3.0 (Shivani).
+2. Streamed 16kHz PCM to live Prisma v3.0 STT WebSocket $\rightarrow$ Transcribed: `"Ramesh ku 340 rupees udhar podu."`.
+3. Proposed CREDIT action $\rightarrow$ Confirmed via voice `"Yes"` $\rightarrow$ Recorded in database.
+4. Verified database balance: **₹340.00**.
+5. Synthesized audio: *"Ramesh paid 200 rupees"* via live Timbre v3.0.
+6. Streamed to live Prisma v3.0 STT $\rightarrow$ Confirmed via voice `"Yes"` $\rightarrow$ Recorded in database.
+7. Verified database balance: **₹140.00**.
+8. Voice balance query: *"How much does Ramesh owe?"* $\rightarrow$ Verified spoken response: `"Ramesh owes ₹140.00"`.
+9. Synthesized Tamil prompt: *"ரமேஷ் குமார்-க்கு ₹340 கடன் பதிவு செய்யவா?"* $\rightarrow$ 142,124 WAV bytes synthesized.
+10. **Result: ALL 10 ACCEPTANCE VERIFICATION STEPS PASSED WITH LIVE GNANI SERVICES.**
 
 ---
 
-## 5. Known Errors and Resolutions
+## 4. Files Created and Modified in Phase 3
 
-1. **Windows Python 3.14 Event Loop Socket Block**:
-   - *Problem*: Windows sandbox blocks local loopback socket connections required by Python 3.14 `ProactorEventLoop._write_to_self()`.
-   - *Fix*: Pytest and Uvicorn test runs must execute with `BypassSandbox: true`.
+### Backend (`backend/`)
+- `app/core/config.py`: Added `GNANI_API_KEY`, `GNANI_STT_MODEL`, `GNANI_TTS_MODEL`, `GNANI_STT_WS_URL`, `GNANI_TTS_API_URL`, `has_gnani_credentials`.
+- `app/services/gnani_tts_service.py`: Service client for Timbre v3.0 REST inference with multi-lingual Indic prompt generation.
+- `app/services/gnani_stt_service.py`: Service client for Prisma v3.0 real-time WebSocket connection and PCM audio streaming.
+- `app/services/intent_parser.py`: Indic multi-dialect intent and entity extraction engine.
+- `app/services/voice_workflow_service.py`: Multi-turn voice session manager and safety validation state machine.
+- `app/api/v1/endpoints/voice.py`: REST endpoints: `GET /api/v1/voice/status`, `POST /api/v1/voice/tts`, `GET /api/v1/voice/tts`.
+- `app/websocket/voice_ws.py`: Real-time WebSocket gateway handling binary PCM audio, upstream Gnani bridging, and workflow dispatch.
+- `app/api/v1/router.py`: Registered voice REST endpoints.
+- `tests/test_gnani_config.py`: 3 tests for settings, SecretStr masking, and placeholder key detection.
+- `tests/test_intent_parser.py`: 6 tests for credit, payment, balance, correction, confirmation, cancellation, and daily summary parsing.
+- `tests/test_voice_workflow.py`: 3 integration tests covering full credit/payment lifecycle, overpayment rejection, and voice corrections.
+- `tests/test_voice_api.py`: 3 integration tests for `/voice/status`, `/voice/tts`, and WebSocket streaming lifecycle.
+- `verify_gnani_live.py`: Full end-to-end live testing script for Prisma v3.0 and Timbre v3.0.
 
-2. **SQLite ALTER TABLE Limitation**:
-   - *Problem*: SQLite does not support direct `ALTER TABLE` to drop `NOT NULL` on existing columns.
-   - *Fix*: Used `render_as_batch=True` in `alembic/env.py` and wrapped operations in `op.batch_alter_table` in migration `3c3db0ba7db1`.
+### Frontend (`frontend/`)
+- `src/types/voice.ts`: TypeScript interfaces for `VoiceLanguage`, `VoiceState`, `PendingVoiceAction`, and `VoiceAssistantMessage`.
+- `src/hooks/useAudioStreamer.ts`: Web Audio API hook downsampling mic input to 16kHz 16-bit mono signed PCM with volume metering.
+- `src/hooks/useVoiceWebSocket.ts`: Enhanced WebSocket hook supporting raw binary audio frames and control messages.
+- `src/features/voice/VoiceContext.tsx`: Global React Context provider for opening and toggling the Voice Assistant.
+- `src/features/voice/FloatingVoiceButton.tsx`: Accessible one-tap floating microphone button for kirana merchants.
+- `src/features/voice/VoiceAssistantModal.tsx`: Complete multi-lingual voice modal with soundwave visualizer, language selector, safety card, audio playback, and typed fallback.
+- `src/layouts/RootLayout.tsx`: Wrapped with `VoiceProvider`, integrated `FloatingVoiceButton`, and updated footer tags.
+- `src/layouts/Header.tsx`: Added Voice Khata button, updated phase badge to Phase 3.
+- `src/layouts/MobileNav.tsx`: Added central raised mic button for one-tap voice access on mobile.
+- `src/features/dashboard/DashboardPage.tsx`: Added Voice Ledger action button and Gnani Prisma active voice indicator strip.
+- `src/tests/VoiceAssistantModal.test.tsx`: 5 tests covering modal rendering, language switching, mic button, typed fallback, and mute toggling.
+- `src/tests/App.test.tsx`: Updated tests for Phase 3 header and voice action button.
 
-3. **Starlette JSONResponse Decimal Serialization**:
-   - *Problem*: FastAPI's `RequestValidationError.errors()` included `Decimal` instances which Starlette's `json.dumps()` could not serialize.
-   - *Fix*: Encoded error details using `fastapi.encoders.jsonable_encoder(details)` in `create_error_response`.
-
-4. **Deterministic Sort Order in SQLite Tests**:
-   - *Problem*: Multiple transactions inserted within the same millisecond have identical timestamps, leading to non-deterministic ordering.
-   - *Fix*: Added secondary sort key `Transaction.id.desc()` in `LedgerService.get_customer_transactions()` and `get_transactions()`.
+### Documentation
+- `docs/architecture.md`: Comprehensive Phase 3 architecture, voice streaming specifications, Mermaid state diagram, and Indic dialect tables.
+- `PROJECT_STATUS.md`: Complete update with Phase 3 status and test verification logs.
+- `README.md`: Updated with Phase 3 voice capabilities, Indic voice examples, and API endpoints.
 
 ---
 
-## 6. Pending Tasks & Instructions for Next Phase (Phase 3)
-
-Phase 2 is completely finished and verified. **Do not proceed to Phase 3 without explicit user approval.**
-
-### Planned Phase 3 Scope:
-1. **Gnani AI Integration**:
-   - Multilingual voice streaming (Hindi, Hinglish, Tamil, Telugu, Kannada, Gujarati, Marathi, Bengali, English).
-   - Audio capture via Web Audio API (16kHz 16-bit PCM).
-   - Bidirectional WebSocket streaming to backend `/api/v1/ws/voice`.
-   - Speech-to-Text (STT) transcription pipeline.
-   - Voice intent classification & entity extraction (Customer name, Transaction Type, Amount).
-   - Text-to-Speech (TTS) voice confirmation audio playback for shopkeepers.
-2. **Shopkeeper Voice Interaction Flow**:
-   - Shopkeeper speaks: *"Ramesh ko 250 rupaye ka udhar likho"*
-   - Audio is streamed over WebSocket -> STT transcribes -> Intent extracted: Customer="Ramesh", Type="CREDIT", Amount="250.00".
-   - Frontend shows confirmation modal / voice card -> Shopkeeper confirms -> Transaction recorded.
-   - Audio response spoken back: *"Ramesh ke khate mein 250 rupaye udhar jode gaye. Kul baki 850 rupaye."*
+## 5. Verification Checklist Before Phase 4
+- [x] Official Gnani Prisma v3.0 STT documentation verified.
+- [x] Official Gnani Timbre v3.0 TTS documentation verified.
+- [x] Valid API key configured via environment variable (`GNANI_API_KEY`).
+- [x] Zero secret leakage in chat, logs, frontend JavaScript, or repository.
+- [x] Live WebSocket audio streaming verified against `wss://api.vachana.ai/stt/v3/stream`.
+- [x] Live TTS synthesis verified against `https://api.vachana.ai/api/v1/tts/inference`.
+- [x] Indic intent parsing verified across English, Hindi, Tamil, and Kannada.
+- [x] Two-step financial safety confirmation workflow verified.
+- [x] Natural voice corrections ("500 illa, 350") and cancellations verified.
+- [x] Overpayment protection verified (`Payment <= Balance`).
+- [x] Decimal precision and idempotency verified.
+- [x] All 33 backend tests passing (`pytest backend -v`).
+- [x] All 15 frontend tests passing (`npm test --prefix frontend`).
+- [x] Frontend production bundle built with 0 errors (`npm run build --prefix frontend`).
+- [x] Clean and verified project state ready for git commit.

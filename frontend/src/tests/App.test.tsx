@@ -2,19 +2,21 @@ import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import App from '../app/App'
 
-describe('VoxLedger AI Frontend Phase 2 Shell', () => {
+describe('VoxLedger AI Frontend Phase 3 Shell', () => {
   it('renders application brand and header navigation elements', () => {
     render(<App />)
     const brandElements = screen.getAllByText(/VoxLedger/i)
     expect(brandElements.length).toBeGreaterThan(0)
-    const phaseElements = screen.getAllByText(/PHASE 2/i)
+    const phaseElements = screen.getAllByText(/PHASE 3/i)
     expect(phaseElements.length).toBeGreaterThan(0)
   })
 
-  it('renders dashboard hero banner and ledger action elements', () => {
+  it('renders dashboard hero banner, voice action and ledger buttons', () => {
     render(<App />)
     expect(screen.getByRole('heading', { name: /Shopkeeper Ledger Dashboard/i })).toBeInTheDocument()
     expect(screen.getByText(/DIGITAL KHATA • KIRANA LEDGER/i)).toBeInTheDocument()
+    const voiceButtons = screen.getAllByRole('button', { name: /Voice/i })
+    expect(voiceButtons.length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Add Customer/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /View All Customers/i })).toBeInTheDocument()
   })

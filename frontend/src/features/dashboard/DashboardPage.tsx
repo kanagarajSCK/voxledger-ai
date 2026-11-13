@@ -9,6 +9,7 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
 import { ErrorAlert } from '../../components/ui/ErrorAlert'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { AddCustomerModal } from '../customers/AddCustomerModal'
+import { useVoiceAssistant } from '../voice/VoiceContext'
 import {
   Users,
   TrendingUp,
@@ -18,10 +19,12 @@ import {
   ChevronRight,
   Receipt,
   Sparkles,
+  Mic,
 } from 'lucide-react'
 
 export const DashboardPage: React.FC = () => {
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
+  const { openVoiceModal } = useVoiceAssistant()
 
   const { data: summary, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['dashboard-summary'],
@@ -46,12 +49,21 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <Button
             variant="primary"
             size="md"
+            onClick={openVoiceModal}
+            className="w-full sm:w-auto gap-2 bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20"
+          >
+            <Mic className="w-4 h-4 animate-pulse" />
+            Voice Ledger
+          </Button>
+          <Button
+            variant="outline"
+            size="md"
             onClick={() => setIsAddCustomerOpen(true)}
-            className="w-full sm:w-auto gap-2"
+            className="w-full sm:w-auto gap-2 bg-white/10 text-white border-white/20 hover:bg-white/20"
           >
             <UserPlus className="w-4 h-4" />
             Add Customer
@@ -62,6 +74,29 @@ export const DashboardPage: React.FC = () => {
             </Button>
           </Link>
         </div>
+      </div>
+
+      {/* Voice Assistant Kirana Helper Strip */}
+      <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-700">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <Mic className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="font-bold text-emerald-950 block sm:inline mr-2">
+              Gnani Prisma v3.0 Voice AI Active:
+            </span>
+            <span className="text-slate-600">
+              बोलें: <span className="font-semibold text-emerald-900 bg-emerald-100/60 px-1.5 py-0.5 rounded">"रमेश का 340 रुपये उधार लिखो"</span> or <span className="font-semibold text-emerald-900 bg-emerald-100/60 px-1.5 py-0.5 rounded">"Ramesh paid 200 rupees"</span>
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={openVoiceModal}
+          className="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline underline-offset-2 shrink-0"
+        >
+          Try Voice Assistant &rarr;
+        </button>
       </div>
 
       {isLoading && (

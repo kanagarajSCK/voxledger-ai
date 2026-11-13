@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 
 export type WebSocketStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -9,7 +9,14 @@ export interface WebSocketMessage {
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000'
 
-export function useVoiceWebSocket(endpoint = '/api/v1/ws/voice') {
+export interface UseVoiceWebSocketOptions {
+  endpoint?: string
+  onMessage?: (message: WebSocketMessage) => void
+}
+
+export function useVoiceWebSocket(options: UseVoiceWebSocketOptions = {}) {
+  const { endpoint = '/api/v1/ws/voice', onMessage } = options
+
   const [status, setStatus] = useState<WebSocketStatus>('disconnected')
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
@@ -35,6 +42,7 @@ export function useVoiceWebSocket(endpoint = '/api/v1/ws/voice') {
         try {
           const data = JSON.parse(event.data) as WebSocketMessage
           setLastMessage(data)
+          onMessage?.(data)
 
           if (data.type === 'pong' && pingTimestampRef.current) {
             const diff = performance.now() - pingTimestampRef.current
@@ -42,7 +50,7 @@ export function useVoiceWebSocket(endpoint = '/api/v1/ws/voice') {
             pingTimestampRef.current = null
           }
         } catch {
-          // Non-JSON message
+          // Non-JSON frame
         }
       }
 
@@ -57,7 +65,7 @@ export function useVoiceWebSocket(endpoint = '/api/v1/ws/voice') {
     } catch {
       setStatus('error')
     }
-  }, [endpoint])
+  }, [endpoint, onMessage])
 
   const disconnect = useCallback(() => {
     if (wsRef.current) {
@@ -69,26 +77,20 @@ export function useVoiceWebSocket(endpoint = '/api/v1/ws/voice') {
 
   const sendMessage = useCallback((msg: WebSocketMessage) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      if (msg.type === 'ping') {
-        pingTimestampRef.current = performance.now()
-      }
       wsRef.current.send(JSON.stringify(msg))
-      return true
     }
-    return false
+  }, [])
+
+  const sendBinary = useCallback((data: ArrayBuffer | Uint8Array) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(data)
+    }
   }, [])
 
   const ping = useCallback(() => {
-    return sendMessage({ type: 'ping' })
+    pingTimestampRef.current = performance.now()
+    sendMessage({ type: 'ping' })
   }, [sendMessage])
-
-  useEffect(() => {
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
-      }
-    }
-  }, [])
 
   return {
     status,
@@ -97,6 +99,7 @@ export function useVoiceWebSocket(endpoint = '/api/v1/ws/voice') {
     connect,
     disconnect,
     sendMessage,
+    sendBinary,
     ping,
   }
 }

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import customers, dashboard, health, transactions
+from app.api.v1.endpoints import customers, dashboard, health, transactions, voice
 from app.websocket.voice_ws import router as voice_ws_router
 
 api_router = APIRouter()
@@ -9,4 +9,5 @@ api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(customers.router)
 api_router.include_router(transactions.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(voice.router)
 api_router.include_router(voice_ws_router, tags=["Realtime Voice Streaming"])

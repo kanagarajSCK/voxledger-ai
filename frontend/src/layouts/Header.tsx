@@ -1,11 +1,13 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { StatusIndicator } from '../components/StatusIndicator'
-import { Mic, BookOpen, Layers, Users, LayoutDashboard } from 'lucide-react'
+import { Mic, BookOpen, Layers, Users, LayoutDashboard, Sparkles } from 'lucide-react'
+import { useVoiceAssistant } from '../features/voice/VoiceContext'
 import { cn } from '../lib/utils'
 
 export const Header: React.FC = () => {
   const location = useLocation()
+  const { openVoiceModal } = useVoiceAssistant()
 
   const navLinks = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -27,8 +29,9 @@ export const Header: React.FC = () => {
                 <span className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
                   VoxLedger<span className="text-emerald-600">.ai</span>
                 </span>
-                <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                  PHASE 2
+                <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                  PHASE 3 • VOICE
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
@@ -76,8 +79,16 @@ export const Header: React.FC = () => {
             </a>
           </nav>
 
-          {/* Right Section: Live Health Pill */}
-          <div className="flex items-center gap-3">
+          {/* Right Section: Voice Assistant CTA & Live Health Pill */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={openVoiceModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold shadow-sm hover:shadow transition-all group"
+            >
+              <Mic className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform" />
+              <span>Voice Khata</span>
+              <Sparkles className="w-3 h-3 text-emerald-300 hidden sm:inline" />
+            </button>
             <StatusIndicator />
           </div>
         </div>

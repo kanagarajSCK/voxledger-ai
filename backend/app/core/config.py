@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AnyHttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +35,23 @@ class Settings(BaseSettings):
     WS_HEARTBEAT_INTERVAL: int = 30
     VOICE_STREAM_SAMPLE_RATE: int = 16000
     VOICE_STREAM_CHANNELS: int = 1
+
+    # Gnani AI (Prisma v3.0 & Timbre v3.0) Configuration
+    GNANI_API_KEY: SecretStr = SecretStr("")
+    GNANI_STT_MODEL: str = "prisma-v3.0"
+    GNANI_TTS_MODEL: str = "timbre-v3.0"
+    GNANI_STT_ENABLED: bool = True
+    GNANI_TTS_ENABLED: bool = True
+    GNANI_STT_WS_URL: str = "wss://api.vachana.ai/stt/v3/stream"
+    GNANI_TTS_API_URL: str = "https://api.vachana.ai/api/v1/tts/inference"
+    GNANI_TTS_DEFAULT_VOICE: str = "Shivani"
+    GNANI_DEFAULT_LANGUAGE: str = "hi-IN"
+    GNANI_TIMEOUT_SECONDS: float = 15.0
+
+    @property
+    def has_gnani_credentials(self) -> bool:
+        val = self.GNANI_API_KEY.get_secret_value()
+        return bool(val and len(val) > 10 and not val.lower().startswith("your_"))
 
     model_config = SettingsConfigDict(
         env_file=".env",
