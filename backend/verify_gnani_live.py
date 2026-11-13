@@ -163,7 +163,7 @@ async def run_live_demo():
         await db.commit()
 
     print(f"4. [Workflow Action Proposed]: {action_res.get('type')}")
-    print(f"   Customer: {action_res['action']['customer_name']}, Amount: ₹{action_res['action']['amount']}")
+    print(f"   Customer: {action_res['action']['customer_name']}, Amount: INR {action_res['action']['amount']}")
     print(f"   Assistant Spoken Prompt: '{action_res.get('spoken_prompt')}'")
 
     # -------------------------------------------------------------
@@ -187,7 +187,7 @@ async def run_live_demo():
     async with AsyncSessionLocal() as db:
         stats = await ledger_service.get_customer_balance_stats(db, ramesh.id)
         current_bal = stats["outstanding_balance"]
-        print(f"   [DB Verified] Ramesh's Outstanding Balance: ₹{current_bal}")
+        print(f"   [DB Verified] Ramesh's Outstanding Balance: INR {current_bal}")
         assert current_bal >= Decimal("340.00")
 
     # -------------------------------------------------------------
@@ -210,8 +210,8 @@ async def run_live_demo():
         )
         await db.commit()
 
-    print(f"   Payment Action Proposed: ₹{pay_action['action']['amount']}")
-    print(f"   Projected New Balance: ₹{pay_action['action']['projected_balance']}")
+    print(f"   Payment Action Proposed: INR {pay_action['action']['amount']}")
+    print(f"   Projected New Balance: INR {pay_action['action']['projected_balance']}")
 
     # Confirm Payment
     print(f"\n8. [Shopkeeper Confirmation] 'Yes'")
@@ -240,7 +240,7 @@ async def run_live_demo():
             language="en-IN",
         )
 
-    print(f"   Balance Report: ₹{bal_res['outstanding_balance']}")
+    print(f"   Balance Report: INR {bal_res['outstanding_balance']}")
     print(f"   Assistant Spoken Response: '{bal_res['spoken_response']}'")
 
     # -------------------------------------------------------------

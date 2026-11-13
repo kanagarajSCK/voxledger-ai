@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import List, Union
 from pydantic import AnyHttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -54,7 +55,7 @@ class Settings(BaseSettings):
         return bool(val and len(val) > 10 and not val.lower().startswith("your_"))
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(Path(__file__).resolve().parents[3] / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",

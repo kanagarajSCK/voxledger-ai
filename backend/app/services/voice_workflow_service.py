@@ -1,6 +1,7 @@
 import base64
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, Any, Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,26 +22,50 @@ class VoiceWorkflowService:
     and spoken feedback generation.
     """
 
-    def __init__(self):
+    def __init__(self, session_ttl_seconds: int = 1800):
         # In-memory store of active voice session states: session_id -> session_data
         self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._session_ttl_seconds = session_ttl_seconds
+
+    def _purge_expired_sessions(self):
+        now_ts = datetime.now(timezone.utc).timestamp()
+        expired = [
+            sid for sid, session in self._sessions.items()
+            if session.get("expires_at") is not None and now_ts > float(session["expires_at"])
+        ]
+        for sid in expired:
+            del self._sessions[sid]
 
     def get_or_create_session(self, session_id: Optional[str] = None, language: str = "en-IN") -> Dict[str, Any]:
+        self._purge_expired_sessions()
         sid = session_id or str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
         if sid not in self._sessions:
             self._sessions[sid] = {
                 "session_id": sid,
                 "language": language,
                 "pending_action": None,
+                "last_completed_action": None,
                 "history": [],
+                "created_at": now.isoformat(),
+                "last_activity_at": now.isoformat(),
+                "expires_at": (now + timedelta(seconds=self._session_ttl_seconds)).timestamp(),
             }
-        elif language:
-            self._sessions[sid]["language"] = language
+        else:
+            self._sessions[sid]["language"] = language or self._sessions[sid].get("language", "en-IN")
+            self._sessions[sid]["last_activity_at"] = now.isoformat()
+            self._sessions[sid]["expires_at"] = (now + timedelta(seconds=self._session_ttl_seconds)).timestamp()
         return self._sessions[sid]
 
     def clear_session(self, session_id: str):
         if session_id in self._sessions:
             del self._sessions[session_id]
+
+    def _is_session_expired(self, session: Dict[str, Any]) -> bool:
+        expires_at = session.get("expires_at")
+        if expires_at is None:
+            return False
+        return datetime.now(timezone.utc).timestamp() > float(expires_at)
 
     async def handle_transcript(
         self,
@@ -198,9 +223,12 @@ class VoiceWorkflowService:
             "projected_balance": str(projected_balance),
             "description": f"Voice transaction via {lang}",
             "raw_text": parsed.raw_text,
+            "idempotency_key": f"voice_{action_id}",
         }
 
-        # Store in session for confirmation
+        # Store in session for confirmation.
+        # The idempotency key is intentionally stable per proposed action so a repeat
+        # confirmation cannot create a second financial write.
         session["pending_action"] = pending
 
         # Generate spoken prompt
@@ -211,7 +239,7 @@ class VoiceWorkflowService:
 
         return {
             "type": "action_proposed",
-            "action": pending,
+            "action": dict(pending),
             "spoken_prompt": spoken_prompt,
             "audio_base64": audio_b64,
         }
@@ -220,6 +248,16 @@ class VoiceWorkflowService:
         self, db: AsyncSession, session: Dict[str, Any], parsed: ParsedIntent
     ) -> Dict[str, Any]:
         lang = session["language"]
+        if self._is_session_expired(session):
+            session["pending_action"] = None
+            prompt = "This voice session has expired. Please start a new transaction."
+            audio_b64 = await self._synthesize_b64(prompt, lang)
+            return {
+                "type": "expired_session",
+                "spoken_response": prompt,
+                "audio_base64": audio_b64,
+            }
+
         pending = session.get("pending_action")
         if not pending:
             return {
@@ -255,7 +293,12 @@ class VoiceWorkflowService:
                 "audio_base64": audio_b64,
             }
 
+        previous_action_id = pending.get("action_id")
+        new_action_id = f"act_{uuid.uuid4().hex[:12]}"
         projected = current_bal + new_amount if tx_type == TransactionType.CREDIT else current_bal - new_amount
+        pending["previous_action_id"] = previous_action_id
+        pending["action_id"] = new_action_id
+        pending["idempotency_key"] = f"voice_{new_action_id}"
         pending["amount"] = str(new_amount)
         pending["projected_balance"] = str(projected)
 
@@ -264,15 +307,29 @@ class VoiceWorkflowService:
 
         return {
             "type": "action_proposed",
-            "action": pending,
+            "action": dict(pending),
             "spoken_prompt": prompt,
             "audio_base64": audio_b64,
         }
 
     async def _execute_pending_action(self, db: AsyncSession, session: Dict[str, Any]) -> Dict[str, Any]:
         lang = session["language"]
+        if self._is_session_expired(session):
+            session["pending_action"] = None
+            prompt = "This voice session has expired. Please start a new transaction."
+            audio_b64 = await self._synthesize_b64(prompt, lang)
+            return {
+                "type": "expired_session",
+                "spoken_response": prompt,
+                "audio_base64": audio_b64,
+            }
+
         pending = session.get("pending_action")
         if not pending:
+            previous = session.get("last_completed_action")
+            if previous:
+                return previous
+
             prompt = self._format_no_action_to_confirm(lang)
             audio_b64 = await self._synthesize_b64(prompt, lang)
             return {
@@ -281,10 +338,10 @@ class VoiceWorkflowService:
                 "audio_base64": audio_b64,
             }
 
-        # Clear pending action from session first to prevent race condition replay
+        # Clear pending action from session first to prevent race condition replay and
+        # repeated confirm messages from creating duplicate writes.
+        action_id = pending["action_id"]
         session["pending_action"] = None
-
-        idempotency_key = f"voice_{pending['action_id']}_{uuid.uuid4().hex[:6]}"
 
         try:
             tx = await ledger_service.record_transaction(
@@ -294,7 +351,7 @@ class VoiceWorkflowService:
                 transaction_type=TransactionType(pending["type"]),
                 description=pending.get("description"),
                 voice_raw_text=pending.get("raw_text"),
-                idempotency_key=idempotency_key,
+                idempotency_key=pending.get("idempotency_key") or f"voice_{action_id}",
             )
 
             # Re-fetch customer updated balance
@@ -309,8 +366,7 @@ class VoiceWorkflowService:
                 lang,
             )
             audio_b64 = await self._synthesize_b64(success_prompt, lang)
-
-            return {
+            result = {
                 "type": "action_executed",
                 "transaction": {
                     "id": tx.public_id,
@@ -324,6 +380,9 @@ class VoiceWorkflowService:
                 "spoken_response": success_prompt,
                 "audio_base64": audio_b64,
             }
+            session["last_completed_action"] = result
+            session["last_completed_action_id"] = action_id
+            return result
         except Exception as e:
             logger.error("Failed to commit confirmed transaction: %s", e)
             error_msg = f"Failed to record transaction: {str(e)}"

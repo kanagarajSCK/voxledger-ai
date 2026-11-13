@@ -61,7 +61,7 @@ def main():
                 json={"customer_id": cid, "amount": 1000.00, "type": "CREDIT", "description": "Wheat 25kg"},
             )
             assert tx1.status_code == 201
-            print("3. Credit Transaction -> VERIFIED (₹1000.00 Credit Added)")
+            print("3. Credit Transaction -> VERIFIED (INR 1000.00 Credit Added)")
 
             # 4. Payment transaction
             tx2 = client.post(
@@ -69,7 +69,7 @@ def main():
                 json={"customer_id": cid, "amount": 350.00, "type": "PAYMENT", "description": "Cash Received"},
             )
             assert tx2.status_code == 201
-            print("4. Payment Transaction -> VERIFIED (₹350.00 Payment Recorded)")
+            print("4. Payment Transaction -> VERIFIED (INR 350.00 Payment Recorded)")
 
             # 5. Customer Balance Verification (1000 - 350 = 650)
             c_updated = client.get(f"/api/v1/customers/{cid}")
@@ -77,7 +77,7 @@ def main():
             assert c_updated.json()["outstanding_balance"] == "650.00"
             assert c_updated.json()["total_credit"] == "1000.00"
             assert c_updated.json()["total_payment"] == "350.00"
-            print("5. Balance Calculation -> VERIFIED (Outstanding Balance: ₹650.00)")
+            print("5. Balance Calculation -> VERIFIED (Outstanding Balance: INR 650.00)")
 
             # 6. Dashboard Summary Verification
             d_res = client.get("/api/v1/dashboard/summary")
@@ -85,7 +85,7 @@ def main():
             dash = d_res.json()
             assert dash["total_customers"] >= 1
             assert Decimal(dash["total_outstanding_credit"]) >= Decimal("650.00")
-            print(f"6. Dashboard Summary -> VERIFIED (Total Customers: {dash['total_customers']}, Outstanding: ₹{dash['total_outstanding_credit']})")
+            print(f"6. Dashboard Summary -> VERIFIED (Total Customers: {dash['total_customers']}, Outstanding: INR {dash['total_outstanding_credit']})")
 
         # 7. WebSocket Voice Streaming Test
         asyncio.run(test_websocket(port))
