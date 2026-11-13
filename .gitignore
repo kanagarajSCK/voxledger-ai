@@ -1,0 +1,51 @@
+# Virtual Environments
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+env/
+ENV/
+
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+backend/voxledger.db
+backend/test_voxledger.db
+voxledger.db
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.eslintcache
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Antigravity artifacts
+.system_generated/
